@@ -1,0 +1,99 @@
+{
+  "expo": {
+    "name": "سائق وصلة",
+    "slug": "wasla-courier",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wasla.courier",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSExceptionDomains": {
+            "72.60.95.121": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": false
+            }
+          }
+        },
+        "NSCameraUsageDescription": "نحتاج الكاميرا لتصوير إثبات استلام وتسليم الطلبات.",
+        "NSPhotoLibraryUsageDescription": "نحتاج الوصول للصور لإرفاق إثبات استلام أو تسليم الطلب.",
+        "NSLocationWhenInUseUsageDescription": "نحتاج موقعك لحساب المسافة والوقت المتوقع للوصول للعميل.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "نحتاج موقعك حتى أثناء إغلاق التطبيق حتى تستمر الإدارة والعميل بمتابعة موقعك أثناء التوصيل.",
+        "UIBackgroundModes": [
+          "location"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.wasla.courier",
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAOLK1R3NQR1imPIUPuE0j-CpbYlqjJNMY"
+        }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#FF6B54",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "نحتاج الوصول للصور لإرفاق إثبات استلام أو تسليم الطلب.",
+          "cameraPermission": "نحتاج الكاميرا لتصوير إثبات استلام وتسليم الطلبات."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "نحتاج موقعك حتى أثناء إغلاق التطبيق حتى تستمر الإدارة والعميل بمتابعة موقعك أثناء التوصيل.",
+          "locationWhenInUsePermission": "نحتاج موقعك لحساب المسافة والوقت المتوقع للوصول للعميل.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#FF6B54"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0d46adb9-fb92-472b-81bf-efcb08babcbb"
+      }
+    },
+    "owner": "nouralasmar"
+  }
+}
