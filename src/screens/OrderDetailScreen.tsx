@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
 import { colors, radius, spacing, tintedShadow, getStatusMeta } from '../theme';
-import { uploadPhoto } from '../api';
+import { getServerNow, uploadPhoto } from '../api';
 import type { Order } from '../api';
 import LiveMap from '../components/LiveMap';
 
@@ -24,8 +24,10 @@ function useAcceptanceCountdown(assignedAt?: string, active?: boolean) {
       return;
     }
 
+    // assignedAt وقت الخادم، فنقارنه بساعة الخادم لا بساعة الجوال — وإلا يظهر العدّاد خاطئًا على
+    // أي جوال ساعته متقدمة أو متأخرة ولو بثوانٍ.
     const compute = () => {
-      const elapsedSeconds = (Date.now() - new Date(assignedAt).getTime()) / 1000;
+      const elapsedSeconds = (getServerNow() - new Date(assignedAt).getTime()) / 1000;
       return Math.max(0, Math.ceil(ACCEPTANCE_TIMEOUT_SECONDS - elapsedSeconds));
     };
 
@@ -79,9 +81,10 @@ const SETTLEMENT_MODE_LABELS: Record<string, string> = {
 
 const TERMINAL_STATUSES = ['delivered', 'closed', 'cancelled', 'deliveryFailed', 'returned'];
 const ISSUE_STATUSES = ['cancelled', 'deliveryFailed', 'returned'];
+const ACCEPTED_OR_LATER_STATUSES = ['accepted', 'pickedUp', 'onTheWay'];
 
 const JOURNEY_STEPS: { status: string; label: string; icon: keyof typeof Ionicons.glyphMap; getTime: (order: Order) => string | undefined }[] = [
-  { status: 'assigned', label: 'إسناد الطلب', icon: 'document-text-outline', getTime: (o) => o.createdAt },
+  { status: 'assigned', label: 'إسناد الطلب', icon: 'document-text-outline', getTime: (o) => o.assignedAt || o.createdAt },
   { status: 'accepted', label: 'تم القبول', icon: 'checkmark-circle-outline', getTime: (o) => o.courierAcceptedAt },
   { status: 'pickedUp', label: 'استلام من المتجر', icon: 'storefront-outline', getTime: (o) => o.pickedUpAt },
   { status: 'onTheWay', label: 'في الطريق للعميل', icon: 'navigate-outline', getTime: (o) => o.onTheWayAt },
@@ -96,6 +99,8 @@ type Props = {
   courierLocation: { latitude: number; longitude: number } | null;
   locationDenied: boolean;
   onBack: () => void;
+  // يطلب من التطبيق سحب أحدث حالة للطلب من الخادم فورًا.
+  onRefresh?: () => void;
   onAccept: (orderId: string) => Promise<void>;
   onReject: (orderId: string) => Promise<void>;
   onPickup: (orderId: string, proofUri: string) => Promise<void>;
@@ -151,7 +156,7 @@ async function pickPhoto(source: 'camera' | 'library'): Promise<string | null> {
   return result.assets[0].uri;
 }
 
-export default function OrderDetailScreen({ order, token, courierLocation, locationDenied, onBack, onAccept, onReject, onPickup, onOnTheWay, onComplete, onDeliveryFailed }: Props) {
+export default function OrderDetailScreen({ order, token, courierLocation, locationDenied, onBack, onRefresh, onAccept, onReject, onPickup, onOnTheWay, onComplete, onDeliveryFailed }: Props) {
   const meta = getStatusMeta(order.status);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState('');
@@ -196,9 +201,21 @@ export default function OrderDetailScreen({ order, token, courierLocation, locat
         ? { latitude: order.customerLatitude, longitude: order.customerLongitude, label: order.customerName }
         : null);
 
-  const notAccepted = !order.courierAcceptedAt;
+  // حالة الطلب نفسها قد تسبق courierAcceptedAt (طلب قيد المزامنة)، فنستبعد الحالات التي تعني أن
+  // القبول تم فعلًا حتى لا يظهر زر القبول وزر الاستلام معًا.
+  const notAccepted = !order.courierAcceptedAt && !ACCEPTED_OR_LATER_STATUSES.includes(order.status);
   const canAcceptReject = notAccepted && !TERMINAL_STATUSES.includes(order.status);
   const acceptanceSecondsLeft = useAcceptanceCountdown(order.assignedAt, canAcceptReject);
+
+  // عند انتهاء المهلة نسأل الخادم فورًا عن مصير الطلب: إن سُحب من السائق تُغلق الشاشة من App،
+  // وإن بقي معه يبقى زر القبول متاحًا — بدل عرض "جاري التحويل" إلى ما لا نهاية بلا تحقق.
+  const expiryCheckedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (acceptanceSecondsLeft !== 0 || !order.assignedAt) return;
+    if (expiryCheckedFor.current === order.assignedAt) return;
+    expiryCheckedFor.current = order.assignedAt;
+    onRefresh?.();
+  }, [acceptanceSecondsLeft, order.assignedAt, onRefresh]);
   const canPickup = order.status === 'accepted';
   const canGoOnTheWay = order.status === 'pickedUp';
   const canComplete = order.status === 'onTheWay';
@@ -531,7 +548,7 @@ export default function OrderDetailScreen({ order, token, courierLocation, locat
                   >
                     {acceptanceSecondsLeft > 0
                       ? `لديك ${acceptanceSecondsLeft} ثانية للقبول قبل تحويل الطلب لسائق آخر`
-                      : 'جاري تحويل الطلب لسائق آخر...'}
+                      : 'انتهت مهلة القبول — قد يُحوَّل الطلب لسائق آخر في أي لحظة'}
                   </Text>
                 </View>
               )}
