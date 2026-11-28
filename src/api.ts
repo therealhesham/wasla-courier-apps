@@ -235,6 +235,24 @@ export class ApiError extends Error {
   }
 }
 
+// فرق التوقيت بين ساعة الجوال وساعة الخادم، يُحدَّث من ترويسة Date مع كل رد. أي حساب يقارن وقتًا
+// قادمًا من الخادم (مثل assignedAt لمهلة القبول) يجب أن يستخدم getServerNow() بدل Date.now()،
+// وإلا يظهر العدّاد خاطئًا على أي جوال ساعته متقدمة أو متأخرة.
+let serverClockOffsetMs = 0;
+
+function syncServerClock(response: Response) {
+  const header = response.headers.get('date');
+  if (!header) return;
+  const serverMs = Date.parse(header);
+  if (Number.isNaN(serverMs)) return;
+  // دقة الترويسة ثانية واحدة، لذلك نضيف نصف ثانية لتوسيط الخطأ.
+  serverClockOffsetMs = serverMs + 500 - Date.now();
+}
+
+export function getServerNow(): number {
+  return Date.now() + serverClockOffsetMs;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, token?: string | null): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -245,6 +263,8 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
       ...(options.headers || {}),
     },
   });
+
+  syncServerClock(response);
 
   const body = await response.json().catch(() => null);
 

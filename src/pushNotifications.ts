@@ -11,15 +11,20 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// قناة الطلبات على أندرويد بأعلى أهمية حتى يظهر الإشعار منبثقًا مع صوت — مهلة قبول الطلب قصيرة،
+// والأهمية الافتراضية تضع الإشعار بالدرج بدون أي تنبيه ظاهر.
+async function ensureAndroidChannel() {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'default',
+    importance: Notifications.AndroidImportance.MAX,
+  });
+}
+
 // يتطلب توليد توكن Expo Push مشروعًا مربوطًا بـ EAS (يملك projectId) — بدونه نتجاهل التسجيل بصمت
 // بدل ما نكسر تدفق تسجيل الدخول، لأن الإشعارات ميزة إضافية وليست حرجة لعمل التطبيق.
 export async function getPushToken(): Promise<string | null> {
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.DEFAULT,
-    });
-  }
+  await ensureAndroidChannel();
 
   const existing = await Notifications.getPermissionsAsync();
   let finalStatus = existing.status;
@@ -37,5 +42,32 @@ export async function getPushToken(): Promise<string | null> {
     return result.data;
   } catch {
     return null;
+  }
+}
+
+// يستدعي onActivity كلما وصل إشعار والتطبيق مفتوح، أو ضغط المستخدم على إشعار — حتى تُحدَّث البيانات
+// فورًا بدل انتظار دورة السحب التالية. يعيد دالة لإلغاء الاشتراك.
+export function subscribeToPushActivity(onActivity: () => void): () => void {
+  const received = Notifications.addNotificationReceivedListener(() => onActivity());
+  const responded = Notifications.addNotificationResponseReceivedListener(() => onActivity());
+  return () => {
+    received.remove();
+    responded.remove();
+  };
+}
+
+// تنبيه محلي فوري (صوت + شريط) — يُستخدم عندما يكتشف التطبيق حدثًا مهمًا عبر السحب الدوري ولم يصل
+// إشعار من الخادم عنه. يفشل بصمت إذا لم تُمنح صلاحية الإشعارات.
+export async function presentLocalAlert(title: string, body: string): Promise<void> {
+  try {
+    await ensureAndroidChannel();
+    const permission = await Notifications.getPermissionsAsync();
+    if (permission.status !== 'granted') return;
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body, sound: true },
+      trigger: null,
+    });
+  } catch {
+    // التنبيه إضافة فقط — لا نكسر أي شيء لو فشل
   }
 }
