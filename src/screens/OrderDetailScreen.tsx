@@ -141,12 +141,16 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+// اختيار صورة من المعرض لا يحتاج صلاحية (يفتح منتقي الصور الخاص بالنظام). طلب صلاحية الصور قبله
+// كان يرجع "مرفوض" بصمت على بعض الأجهزة، فيضغط السائق "اختيار من المعرض" ولا يحدث شيء أبدًا.
+// رفض صلاحية الكاميرا يُبلَّغ للسائق بدل ما يُغلق النافذة بلا تفسير.
 async function pickPhoto(source: 'camera' | 'library'): Promise<string | null> {
-  const permission = source === 'camera'
-    ? await ImagePicker.requestCameraPermissionsAsync()
-    : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-  if (!permission.granted) return null;
+  if (source === 'camera') {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error('لا يمكن فتح الكاميرا بدون صلاحية. اسمح للتطبيق باستخدام الكاميرا من إعدادات الجوال، أو اختر صورة من المعرض.');
+    }
+  }
 
   const result = source === 'camera'
     ? await ImagePicker.launchCameraAsync({ quality: 0.6, base64: false })
@@ -246,9 +250,18 @@ export default function OrderDetailScreen({ order, token, courierLocation, locat
     }
   };
 
-  const handlePickPhotoForPickup = async (source: 'camera' | 'library') => {
+  const choosePhoto = async (source: 'camera' | 'library') => {
     setPhotoPickerVisible(null);
-    const uri = await pickPhoto(source);
+    try {
+      return await pickPhoto(source);
+    } catch (err: any) {
+      setError(err?.message || 'تعذر فتح الصور.');
+      return null;
+    }
+  };
+
+  const handlePickPhotoForPickup = async (source: 'camera' | 'library') => {
+    const uri = await choosePhoto(source);
     if (!uri) return;
 
     setActing(true);
@@ -276,16 +289,14 @@ export default function OrderDetailScreen({ order, token, courierLocation, locat
   };
 
   const handlePickPhotoForComplete = async (source: 'camera' | 'library') => {
-    setPhotoPickerVisible(null);
-    const uri = await pickPhoto(source);
+    const uri = await choosePhoto(source);
     if (!uri) return;
     setCapturedPhoto(uri);
     setCompleteVisible(true);
   };
 
   const handlePickPhotoForFailure = async (source: 'camera' | 'library') => {
-    setPhotoPickerVisible(null);
-    const uri = await pickPhoto(source);
+    const uri = await choosePhoto(source);
     if (!uri) return;
     setFailurePhoto(uri);
     setFailureReason('');

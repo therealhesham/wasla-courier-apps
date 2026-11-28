@@ -49,6 +49,10 @@ type OverlayScreen = 'detail' | 'violations' | 'statement' | 'support' | null;
 // المخالفات...) أثقل وأقل استعجالًا فتُسحب على فترة أطول.
 const ORDERS_POLL_MS = 7000;
 const PROFILE_POLL_MS = 30000;
+// الخادم يعتبر السائق غير متصل إذا مرّت ٩٠ ثانية بلا نبضة موقع. watchPositionAsync لا يرسل شيئًا
+// إذا لم يتحرك السائق ١٥ مترًا، فالسائق الواقف ينتظر طلبًا كان "يختفي" من الإسناد مع أن التطبيق مفتوح.
+// لذلك نعيد إرسال آخر موقع معروف كل ٣٠ ثانية حتى لو لم يتحرك.
+const LOCATION_HEARTBEAT_MS = 30000;
 // إذا وصل إشعار من الخادم خلال هذه المدة فلا داعي لتنبيه محلي مكرر عن نفس الحدث.
 const PUSH_DEDUPE_WINDOW_MS = 10000;
 
@@ -381,6 +385,17 @@ export default function App() {
     if (!token) return;
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
+    let lastSent: { latitude: number; longitude: number } | null = null;
+
+    const sendLocation = (coords: { latitude: number; longitude: number }) => {
+      lastSent = coords;
+      updateLocation(token, coords.latitude, coords.longitude).catch(() => {});
+    };
+
+    const heartbeat = setInterval(() => {
+      if (cancelled || !lastSent || AppState.currentState !== 'active') return;
+      sendLocation(lastSent);
+    }, LOCATION_HEARTBEAT_MS);
 
     (async () => {
       const permission = await Location.requestForegroundPermissionsAsync();
@@ -395,7 +410,7 @@ export default function App() {
             if (cancelled) return;
             const coords = { latitude: position.coords.latitude, longitude: position.coords.longitude };
             setCourierLocation(coords);
-            updateLocation(token, coords.latitude, coords.longitude).catch(() => {});
+            sendLocation(coords);
           },
         );
       } catch {
@@ -410,6 +425,7 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      clearInterval(heartbeat);
       subscription?.remove();
     };
   }, [token]);
